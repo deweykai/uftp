@@ -72,6 +72,23 @@ static int get_frame_count(int len) {
 }
 
 static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+    struct pollfd pfd[1];
+
+    pfd[0].fd = sockfd;
+    pfd[0].events = POLLOUT;
+
+    int num_events = poll(pfd, 1, 1000);
+    if (num_events == 0) {
+        return true;
+    }
+
+    int pollout_happened = pfd[0].revents & POLLOUT;
+
+    if (!pollout_happened) {
+        printf("Unexpected pollout event\n");
+        return true;
+    }
+
     if (dest_addr == NULL) {
         if (send(sockfd, frame, sizeof(frame_t), 0) == -1) {
             handle_error("send");
@@ -99,21 +116,21 @@ static bool recv_frame(int sockfd, frame_t* frame, sockaddr* client_addr, sockle
 
     int pollin_happened = pfd[0].revents & POLLIN;
 
-    if (pollin_happened) {
-        if (client_addr == NULL) {
-            if (recv(sockfd, frame, sizeof(frame_t), 0) == -1) {
-                handle_error("recv");
-            }
-        }
-        else {
-            if (recvfrom(sockfd, frame, sizeof(frame_t), 0, client_addr, client_addr_len) == -1) {
-                handle_error("recvfrom");
-            }
+    if (!pollin_happened) {
+        printf("Unexpected pollin event\n");
+        return true;
+    }
+
+
+    if (client_addr == NULL) {
+        if (recv(sockfd, frame, sizeof(frame_t), 0) == -1) {
+            handle_error("recv");
         }
     }
     else {
-        printf("Unexpected poll event\n");
-        return true;
+        if (recvfrom(sockfd, frame, sizeof(frame_t), 0, client_addr, client_addr_len) == -1) {
+            handle_error("recvfrom");
+        }
     }
 
     return false;
