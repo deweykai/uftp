@@ -61,13 +61,6 @@ int main(int argc, char** argv) {
     while (1) {
         handle_session(s);
         printf("end of client session\n");
-        // if (data == NULL) {
-        //     continue;
-        // }
-        // printf("%s\n", data);
-
-        // send_data(s, data, len, (sockaddr*)&client_addr, &client_addr_len);
-        // free(data);
     }
 
     return 0;
