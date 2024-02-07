@@ -10,6 +10,7 @@
 #include <sys/types.h> 
 
 #include "my_udp.h"
+#include "my_ftp.h"
 
 #define BACKLOG 5
 
@@ -58,19 +59,14 @@ int main(int argc, char** argv) {
     int s = get_socket(argv[1]);
 
     while (1) {
-        sockaddr_storage client_addr;
-        socklen_t client_addr_len = sizeof(client_addr);
+        handle_server(s);
+        // if (data == NULL) {
+        //     continue;
+        // }
+        // printf("%s\n", data);
 
-        int len;
-
-        char* data = recv_data(s, &len, (sockaddr*)&client_addr, &client_addr_len);
-        if (data == NULL) {
-            continue;
-        }
-        printf("%s\n", data);
-
-        send_data(s, data, len, (sockaddr*)&client_addr, &client_addr_len);
-        free(data);
+        // send_data(s, data, len, (sockaddr*)&client_addr, &client_addr_len);
+        // free(data);
     }
 
     return 0;

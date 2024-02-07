@@ -6,10 +6,7 @@
 
 #include "my_udp.h"
 
-#define DEBUG 1
-
-#define PACKET_SIZE 1024
-#define RETRY_COUNT 3
+#define DEBUG 0
 
 void handle_error(const char* msg) {
     perror(msg);
@@ -18,6 +15,11 @@ void handle_error(const char* msg) {
 
 struct frame_t {
     int frame_id;
+    enum {
+        AWK,
+        DATA,
+        START,
+    } type;
 
     union {
         struct {
@@ -29,11 +31,6 @@ struct frame_t {
         } info;
     };
 
-    enum {
-        AWK,
-        DATA,
-        START,
-    } type;
 };
 
 typedef struct frame_t frame_t;
@@ -185,6 +182,8 @@ bool recv_frame_awk(int sockfd, frame_t* frame, sockaddr* client_addr, socklen_t
 
     awk.type = AWK;
     awk.frame_id = frame->frame_id;
+    memset(&awk.data, 0, PACKET_SIZE); // zero memory
+    memcpy(&awk.data.data, "ACK", 3); // set data to ACK for debugging
 
     send_frame(&awk, sockfd, client_addr, client_addr_len);
 
@@ -205,6 +204,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 
     // we send the total size first so client can allocate space.
     frame.type = START;
+    memset(&frame.data, 0, PACKET_SIZE); // zero memory
     frame.info.bytes = len;
     frame.frame_id = 0;
 
@@ -238,6 +238,12 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_addr_len) {
     // receive start frame
     frame_t frame;
+
+    // give a dummy length to avoid null error
+    int dummy_len = 0;
+    if (len == NULL) {
+        len = &dummy_len;
+    }
 
     if (recv_frame_awk(sockfd, &frame, client_addr, client_addr_len)) {
         *len = 0;

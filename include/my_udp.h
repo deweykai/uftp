@@ -6,6 +6,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#define PACKET_SIZE 1024
+#define RETRY_COUNT 3
+
+
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
 typedef struct sockaddr_storage sockaddr_storage;
