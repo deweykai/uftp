@@ -60,14 +60,5 @@ int main(int argc, char** argv) {
     ftp_delete(s, "foo.txt");
     ftp_exit(s);
 
-    // char buf[32] = "hello world!";
-    // send_data(s, buf, sizeof(buf), NULL, NULL);
-
-    // int len;
-    // char* data = recv_data(s, &len, NULL, NULL);
-    // printf("%s\n", data);
-
-    // TODO: CRC checksum
-
     return 0;
 }
