@@ -25,17 +25,17 @@ void print_command(ftp_command cmd) {
     }
 }
 
-void response_ok(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void response_ok(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     ftp_response response = OK;
     send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len);
 }
 
-void response_error(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void response_error(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     ftp_response response = ERROR;
     send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len);
 }
 
-void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     int len;
     char* filename = (char*)recv_data(s, &len, (sockaddr*)client_addr, client_addr_len);
     if (filename == NULL) {
@@ -81,7 +81,7 @@ void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     free(data);
 }
 
-void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     // get filename
     char* filename = (char*)recv_data(s, NULL, client_addr, client_addr_len);
     if (filename == NULL) {
@@ -128,7 +128,7 @@ void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     free(filedata);
 }
 
-void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     DIR* dir = opendir(".");
     if (dir == NULL) {
         perror("opendir");
@@ -172,7 +172,7 @@ void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     free(files);
 }
 
-void handle_delete(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static void handle_delete(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     // get filename
     char* filename = (char*)recv_data(s, NULL, client_addr, client_addr_len);
     if (filename == NULL) {
