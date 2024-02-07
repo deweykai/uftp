@@ -178,6 +178,7 @@ static void handle_delete(int s, sockaddr* client_addr, socklen_t* client_addr_l
     if (filename == NULL) {
         fprintf(stderr, "failed to read filename\n");
         response_error(s, client_addr, client_addr_len);
+        free(filename);
         return;
     }
 
@@ -195,7 +196,11 @@ static void handle_delete(int s, sockaddr* client_addr, socklen_t* client_addr_l
     free(filename);
 }
 
-void handle_server(int s) {
+static void handle_exit(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+    response_ok(s, client_addr, client_addr_len);
+}
+
+void handle_session(int s) {
     while (true) {
         sockaddr_storage client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
@@ -225,7 +230,7 @@ void handle_server(int s) {
             handle_ls(s, (sockaddr*)&client_addr, &client_addr_len);
             break;
         case EXIT:
-            printf("exiting client\n");
+            handle_exit(s, (sockaddr*)&client_addr, &client_addr_len);
             return;
         }
     }

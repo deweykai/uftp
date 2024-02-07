@@ -59,7 +59,8 @@ int main(int argc, char** argv) {
     int s = get_socket(argv[1]);
 
     while (1) {
-        handle_server(s);
+        handle_session(s);
+        printf("end of client session\n");
         // if (data == NULL) {
         //     continue;
         // }

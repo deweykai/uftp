@@ -19,7 +19,7 @@ enum ftp_response {
 typedef enum ftp_command ftp_command;
 typedef enum ftp_response ftp_response;
 
-void handle_server(int s);
+void handle_session(int s);
 
 // void handler();
 
