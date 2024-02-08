@@ -3,3 +3,8 @@
 *.dSYM
 udp_server
 udp_client
+
+ftp_server
+ftp_client
+
+test*
