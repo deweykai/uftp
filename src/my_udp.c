@@ -16,7 +16,7 @@ void handle_error(const char* msg) {
 struct frame_t {
     int frame_id;
     enum {
-        AWK,
+        ACK,
         DATA,
         START,
     } type;
@@ -35,12 +35,18 @@ struct frame_t {
 
 typedef struct frame_t frame_t;
 
+struct frame_ack_t {
+    int frame_id;
+};
+
+typedef struct frame_ack_t frame_ack_t;
+
 static void print_frame(frame_t* frame) {
     printf("FRAME: %d\n", frame->frame_id);
 
     switch (frame->type) {
-    case AWK:
-        printf("  AWK\n");
+    case ACK:
+        printf("  ACK\n");
         break;
     case DATA:
         printf("  DATA\n");
@@ -68,7 +74,7 @@ static int get_frame_count(int len) {
     return frame_count;
 }
 
-static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+static bool send_timeout(char* data, int data_len, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     struct pollfd pfd[1];
 
     pfd[0].fd = sockfd;
@@ -87,12 +93,12 @@ static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_
     }
 
     if (dest_addr == NULL) {
-        if (send(sockfd, frame, sizeof(frame_t), 0) == -1) {
+        if (send(sockfd, data, data_len, 0) == -1) {
             handle_error("send");
         }
     }
     else {
-        if (sendto(sockfd, frame, sizeof(frame_t), 0, dest_addr, *dest_addr_len) == -1) {
+        if (sendto(sockfd, data, data_len, 0, dest_addr, *dest_addr_len) == -1) {
             handle_error("sendto");
         }
     }
@@ -100,7 +106,32 @@ static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_
     return false;
 }
 
-static bool recv_frame(int sockfd, frame_t* frame, sockaddr* client_addr, socklen_t* client_addr_len) {
+static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+    return send_timeout((char*)frame, sizeof(frame_t), sockfd, dest_addr, dest_addr_len);
+}
+
+/// @brief Send acknowledge message
+/// @param frame for which to send ack
+/// @param sockfd 
+/// @param dest_addr 
+/// @param dest_addr_len 
+/// @return true on failure
+static bool send_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+    frame_ack_t ack;
+    ack.frame_id = frame->frame_id;
+    return send_timeout((char*)&ack, sizeof(frame_ack_t), sockfd, dest_addr, dest_addr_len);
+
+    // frame_t ack;
+
+    // ack.type = ACK;
+    // ack.frame_id = frame->frame_id;
+    // memset(&ack.data, 0, PACKET_SIZE); // zero memory
+    // memcpy(&ack.data.data, "ACK", 3); // set data to ACK for debugging
+
+    // return send_frame(&ack, sockfd, dest_addr, dest_addr_len);
+}
+
+static bool recv_timeout(char* data, int data_len, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
     struct pollfd pfd[1];
 
     pfd[0].fd = sockfd;
@@ -120,12 +151,12 @@ static bool recv_frame(int sockfd, frame_t* frame, sockaddr* client_addr, sockle
 
 
     if (client_addr == NULL) {
-        if (recv(sockfd, frame, sizeof(frame_t), 0) == -1) {
+        if (recv(sockfd, data, data_len, 0) == -1) {
             handle_error("recv");
         }
     }
     else {
-        if (recvfrom(sockfd, frame, sizeof(frame_t), 0, client_addr, client_addr_len) == -1) {
+        if (recvfrom(sockfd, data, data_len, 0, client_addr, client_addr_len) == -1) {
             handle_error("recvfrom");
         }
     }
@@ -133,26 +164,25 @@ static bool recv_frame(int sockfd, frame_t* frame, sockaddr* client_addr, sockle
     return false;
 }
 
-static bool send_frame_awk(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+static bool recv_frame(int sockfd, frame_t* frame, sockaddr* client_addr, socklen_t* client_addr_len) {
+    return recv_timeout((char*)frame, sizeof(frame_t), sockfd, client_addr, client_addr_len);
+}
+
+static bool send_frame_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     for (int i = 0; i < RETRY_COUNT; i++) {
         if (send_frame(frame, sockfd, dest_addr, dest_addr_len)) {
             printf("Failed to send frame\n");
             continue;
         }
 
-        frame_t awk_frame;
-        if (recv_frame(sockfd, &awk_frame, dest_addr, dest_addr_len)) {
-            printf("Failed to receive AWK frame\n");
+        // check acknowledge
+        frame_ack_t ack;
+        if (recv_timeout((char*)&ack, sizeof(ack), sockfd, dest_addr, dest_addr_len)) {
+            printf("Failed to receive ACK frame\n");
             continue;
         }
 
-        // we should only receive an AWK frame
-        if (awk_frame.type != AWK) {
-            fprintf(stderr, "Expected AWK frame\n");
-            return true;
-        }
-
-        if (awk_frame.frame_id == frame->frame_id) {
+        if (ack.frame_id == frame->frame_id) {
             return false;
         }
     }
@@ -166,26 +196,19 @@ static bool send_frame_awk(frame_t* frame, int sockfd, sockaddr* dest_addr, sock
     return true;
 }
 
-bool recv_frame_awk(int sockfd, frame_t* frame, sockaddr* client_addr, socklen_t* client_addr_len) {
+/// receive frame and resposne with ack message
+static bool recv_frame_ack(int sockfd, frame_t* frame, sockaddr* client_addr, socklen_t* client_addr_len) {
     if (recv_frame(sockfd, frame, client_addr, client_addr_len)) {
         return true;
     }
 
-    // don't except awks
-    if (frame->type == AWK) {
-        printf("Received AWK frame\n");
+    // don't except acks
+    if (frame->type == ACK) {
+        printf("Received ACK frame\n");
         exit(EXIT_FAILURE);
     }
 
-    // send ack
-    frame_t awk;
-
-    awk.type = AWK;
-    awk.frame_id = frame->frame_id;
-    memset(&awk.data, 0, PACKET_SIZE); // zero memory
-    memcpy(&awk.data.data, "ACK", 3); // set data to ACK for debugging
-
-    send_frame(&awk, sockfd, client_addr, client_addr_len);
+    send_ack(frame, sockfd, client_addr, client_addr_len);
 
     return false;
 }
@@ -208,7 +231,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
     frame.info.bytes = len;
     frame.frame_id = 0;
 
-    if (send_frame_awk(&frame, sockfd, dest_addr, dest_addr_len)) {
+    if (send_frame_ack(&frame, sockfd, dest_addr, dest_addr_len)) {
         return -1;
     }
 
@@ -223,7 +246,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
         memset(&frame.data.data, 0, PACKET_SIZE);
         memcpy(&frame.data.data, msg + PACKET_SIZE * (i - 1), data_len);
 
-        if (send_frame_awk(&frame, sockfd, dest_addr, dest_addr_len)) {
+        if (send_frame_ack(&frame, sockfd, dest_addr, dest_addr_len)) {
             return -1;
         }
     }
@@ -245,7 +268,7 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
         len = &dummy_len;
     }
 
-    if (recv_frame_awk(sockfd, &frame, client_addr, client_addr_len)) {
+    if (recv_frame_ack(sockfd, &frame, client_addr, client_addr_len)) {
         *len = 0;
         return NULL;
     }
@@ -260,16 +283,17 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
 #if DEBUG
     printf("Expecting %d frames\n", frame_count);
 #endif
+    int data_len = *len;
     for (int i = 1; i <= frame_count; i++) {
-        if (recv_frame_awk(sockfd, &frame, client_addr, client_addr_len)) {
+        if (recv_frame_ack(sockfd, &frame, client_addr, client_addr_len)) {
             free(data);
             *len = 0;
             return NULL;
         }
 
         // copy data into buffer
-        int data_len = min(*len - PACKET_SIZE * (i - 1), PACKET_SIZE);
-        memcpy(data + PACKET_SIZE * (frame.frame_id - 1), &frame.data.data, data_len);
+        memcpy(data + PACKET_SIZE * (frame.frame_id - 1), &frame.data.data, min(data_len, PACKET_SIZE));
+        data_len = data_len - PACKET_SIZE;
     }
 
 #if DEBUG
