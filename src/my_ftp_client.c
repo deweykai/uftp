@@ -1,10 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "my_ftp_client.h"
 
-char* ftp_get(int s, char* filename) {
+char* ftp_get(int s, char* filename, int* len) {
     // send command
     ftp_command cmd = GET;
     if (send_data(s, (char*)&cmd, sizeof(GET), NULL, NULL) == -1) {
@@ -26,14 +22,14 @@ char* ftp_get(int s, char* filename) {
     }
 
     if (*status == ERROR) {
-        fprintf(stderr, "GET: server failed to get file: %s\n", filename);
+        fprintf(stderr, "GET: server failed to get file: \"%s\"\n", filename);
         free(status);
         return NULL;
     }
     free(status);
 
     // get data
-    char* data = recv_data(s, NULL, NULL, NULL);
+    char* data = recv_data(s, len, NULL, NULL);
     if (data == NULL) {
         fprintf(stderr, "GET: failed to receive data\n");
         return NULL;
@@ -104,7 +100,7 @@ void ftp_delete(int s, char* filename) {
     }
 
 
-    printf("deleted file\n");
+    printf("deleted file: %s\n", filename);
     free(status);
 }
 

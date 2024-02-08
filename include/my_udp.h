@@ -1,10 +1,7 @@
 #ifndef MY_UDP_H
 #define MY_UDP_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#include "common.h"
 
 #define PACKET_SIZE 1024
 #define RETRY_COUNT 3

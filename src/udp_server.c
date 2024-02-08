@@ -2,13 +2,6 @@
  * udpserver.c - A simple UDP echo server
  * usage: udpserver <port>
  */
-
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h> 
-
 #include "my_udp.h"
 #include "my_ftp.h"
 

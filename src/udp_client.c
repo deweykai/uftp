@@ -2,16 +2,7 @@
  * udpclient.c - A simple UDP client
  * usage: udpclient <host> <port>
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h> 
-
-#include "my_udp.h"
-#include "my_ftp.h"
-#include "my_ftp_client.h"
+#include "my_repl.h"
 
 int get_socket(char* hostname, char* port) {
     struct addrinfo hints, * res;
@@ -42,23 +33,25 @@ int main(int argc, char** argv) {
     }
 
     int s = get_socket(argv[1], argv[2]);
+    my_repl(s);
 
-    char* msg = "what is up!";
-    ftp_put(s, "foo.txt", msg, strlen(msg));
-    char* files = ftp_ls(s);
-    if (files != NULL) {
-        printf("%s\n", files);
-        free(files);
-    }
+    // char* msg = "what is up!";
+    // ftp_put(s, "foo.txt", msg, strlen(msg));
+    // char* files = ftp_ls(s);
+    // if (files != NULL) {
+    //     printf("%s\n", files);
+    //     free(files);
+    // }
 
-    char* data = ftp_get(s, "foo.txt");
-    if (data != NULL) {
-        printf("%s\n", data);
-        free(data);
-    }
 
-    ftp_delete(s, "foo.txt");
-    ftp_exit(s);
+    // char* data = ftp_get(s, "foo.txt");
+    // if (data != NULL) {
+    //     printf("%s\n", data);
+    //     free(data);
+    // }
+
+    // ftp_delete(s, "foo.txt");
+    // ftp_exit(s);
 
     return 0;
 }

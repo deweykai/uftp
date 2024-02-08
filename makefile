@@ -1,7 +1,7 @@
 CC := clang
 CFLAGS := -Wall -Wextra -Werror -std=c17 -pedantic -g -Iinclude
 # List of source files
-SRC_FILES := src/my_udp.c src/my_ftp.c src/my_ftp_client.c
+SRC_FILES := src/my_udp.c src/my_ftp.c src/my_ftp_client.c src/my_repl.c
 
 INCLUDES := $(wildcard include/*.h)
 

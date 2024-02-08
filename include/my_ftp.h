@@ -1,6 +1,7 @@
 #ifndef MY_FTP_H
 #define MY_FTP_H
 
+#include "common.h"
 #include "my_udp.h"
 
 enum ftp_command { // all commands send a ftp_response. The response comes before any sent data.

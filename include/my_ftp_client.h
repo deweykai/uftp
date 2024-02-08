@@ -3,7 +3,7 @@
 
 #include "my_ftp.h"
 
-char* ftp_get(int s, char* filename);
+char* ftp_get(int s, char* filename, int* len);
 void ftp_put(int s, char* filename, char* filedata, int filedata_len);
 void ftp_delete(int s, char* filename);
 char* ftp_ls(int s);
