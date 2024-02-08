@@ -2,7 +2,7 @@
 
 #include "my_udp.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #define TIMEOUT_MS 1000
 
 void handle_error(const char* msg) {
@@ -161,7 +161,16 @@ static bool recv_frame(frame_t* frame, int sockfd, sockaddr* client_addr, sockle
     return recv_timeout((char*)frame, sizeof(frame_t), sockfd, client_addr, client_addr_len);
 }
 
-static bool send_frame_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+static frame_ack_t recv_ack(int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
+    frame_ack_t ack;
+    if (recv_timeout((char*)&ack, sizeof(ack), sockfd, client_addr, client_addr_len)) {
+        printf("Failed to receive ACK frame\n");
+        ack.frame_id = -1;
+    }
+    return ack;
+}
+
+static bool send_frame_ack(frame_t* frame, bool wait_ack, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     for (int i = 0; i < RETRY_COUNT; i++) {
         if (send_frame(frame, sockfd, dest_addr, dest_addr_len)) {
             printf("Failed to send frame\n");
@@ -169,12 +178,10 @@ static bool send_frame_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, sock
         }
 
         // check acknowledge
-        frame_ack_t ack;
-        if (recv_timeout((char*)&ack, sizeof(ack), sockfd, dest_addr, dest_addr_len)) {
-            printf("Failed to receive ACK frame\n");
-            continue;
+        if (!wait_ack) {
+            return false;
         }
-
+        frame_ack_t ack = recv_ack(sockfd, dest_addr, dest_addr_len);
         if (ack.frame_id == frame->frame_id) {
             return false;
         }
@@ -190,17 +197,29 @@ static bool send_frame_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, sock
 }
 
 /// receive frame and resposne with ack message
-static bool recv_frame_ack(frame_t* frame, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
-    if (recv_frame(frame, sockfd, client_addr, client_addr_len)) {
-        return true;
+static bool recv_frame_ack(frame_t* frame, int next_frame, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
+    for (int i = 0; i < RETRY_COUNT; i++) {
+        if (recv_frame(frame, sockfd, client_addr, client_addr_len)) {
+            return true;
+        }
+
+        if (frame->frame_id != next_frame) {
+#if DEBUG
+            printf("Received frame %d, expected %d\n", frame->frame_id, next_frame);
+#endif
+            // try to receive frame multiple times in case of out of order frames
+            continue;
+        }
+
+        send_ack(frame, sockfd, client_addr, client_addr_len);
+
+        return false;
     }
 
-    send_ack(frame, sockfd, client_addr, client_addr_len);
-
-    return false;
+    return true;
 }
 
-int send_frame_by_id(const char* msg, int len, int frame_id, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+int send_frame_by_id(const char* msg, int len, int frame_id, bool wait_ack, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     frame_t frame;
     frame.frame_id = frame_id;
     frame.type = DATA;
@@ -211,7 +230,7 @@ int send_frame_by_id(const char* msg, int len, int frame_id, int sockfd, sockadd
 
     memcpy(&frame.data.data, msg + data_offset, data_size);
 
-    return send_frame_ack(&frame, sockfd, dest_addr, dest_addr_len);
+    return send_frame_ack(&frame, wait_ack, sockfd, dest_addr, dest_addr_len);
 }
 
 int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen_t* dest_addr_len) {
@@ -232,16 +251,61 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
     frame.info.bytes = len;
     frame.frame_id = 0;
 
-    if (send_frame_ack(&frame, sockfd, dest_addr, dest_addr_len)) {
+    if (send_frame_ack(&frame, true, sockfd, dest_addr, dest_addr_len)) {
         return -1;
     }
 
     // send data frames sequentially
-    for (int i = 1; i <= frame_count; i++) {
-        if (send_frame_by_id(msg, len, i, sockfd, dest_addr, dest_addr_len)) {
-            return -1;
+    int base_frame_id = 1;
+    int current_frame_id = 1;
+    int reset_counter = 0;
+    int success_counter = 0;
+    static int GO_BACK_N = 2;
+    while (base_frame_id <= frame_count) {
+        // send up to base + N frames
+        while (current_frame_id <= min(base_frame_id + GO_BACK_N - 1, frame_count)) {
+            if (send_frame_by_id(msg, len, current_frame_id, false, sockfd, dest_addr, dest_addr_len)) {
+                return -1;
+            }
+            current_frame_id++;
+        }
+
+        // wait for ack
+        frame_ack_t ack = recv_ack(sockfd, dest_addr, dest_addr_len);
+        if (ack.frame_id == -1) {
+            reset_counter++;
+            if (reset_counter > RETRY_COUNT) {
+                fprintf(stderr, "Failed to send frame\n");
+                return -1;
+            }
+#if DEBUG
+            printf("Resetting base frame id\n");
+#endif
+            current_frame_id = base_frame_id;
+            success_counter = 0;
+
+            GO_BACK_N = GO_BACK_N < 2 ? 1 : GO_BACK_N / 2;
+#if DEBUG
+            printf("Decreasing GO_BACK_N to %d\n", GO_BACK_N);
+#endif
+        }
+        else {
+            reset_counter = 0;
+            success_counter++;
+            base_frame_id++;
+            if (success_counter * 2 >= GO_BACK_N && GO_BACK_N < 1024) {
+                GO_BACK_N = GO_BACK_N * 2;
+#if DEBUG
+                printf("Increasing GO_BACK_N to %d\n", GO_BACK_N);
+#endif
+            }
         }
     }
+    // for (int i = 1; i <= frame_count; i++) {
+    //     if (send_frame_by_id(msg, len, i, true, sockfd, dest_addr, dest_addr_len)) {
+    //         return -1;
+    //     }
+    // }
 
 #if DEBUG
     printf("Sent %d bytes\n", len);
@@ -260,7 +324,7 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
         len = &dummy_len;
     }
 
-    if (recv_frame_ack(&frame, sockfd, client_addr, client_addr_len)) {
+    if (recv_frame_ack(&frame, 0, sockfd, client_addr, client_addr_len)) {
         *len = 0;
         return NULL;
     }
@@ -277,16 +341,16 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
 #endif
     int data_len = *len;
     for (int i = 1; i <= frame_count; i++) {
-        if (recv_frame_ack(&frame, sockfd, client_addr, client_addr_len)) {
+        if (recv_frame_ack(&frame, i, sockfd, client_addr, client_addr_len)) {
             free(data);
             *len = 0;
             return NULL;
-    }
+        }
 
         // copy data into buffer
         memcpy(data + PACKET_SIZE * (frame.frame_id - 1), &frame.data.data, min(data_len, PACKET_SIZE));
         data_len = data_len - PACKET_SIZE;
-}
+    }
 
 #if DEBUG
     printf("Received %d bytes\n", *len);
