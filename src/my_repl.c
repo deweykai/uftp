@@ -122,9 +122,16 @@ bool handle_line(int sockfd, char* line) {
                 return false;
             }
 
-            char* data = ftp_get(sockfd, arg, NULL);
+            int len;
+            char* data = ftp_get(sockfd, arg, &len);
             if (data != NULL) {
-                printf("%s\n", data);
+                if (len < 1000) {
+                    // don't print huge files
+                    printf("%s\n", data);
+                }
+                else {
+                    printf("file too large to print\n");
+                }
                 free(data);
             }
 
