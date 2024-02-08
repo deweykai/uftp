@@ -33,8 +33,31 @@ static bool handle_get(int sockfd, char* filename) {
 }
 
 static bool handle_put(int sockfd, char* filename) {
-    char* data = "what is up!";
-    ftp_put(sockfd, filename, data, strlen(data));
+    // read data from local file
+
+    FILE* file = fopen(filename, "r");
+    if (file == NULL) {
+        fprintf(stderr, "PUT: failed to open file: \"%s\"\n", filename);
+        return false;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long len = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char* data = malloc(len);
+    if (fread(data, 1, len, file) != (unsigned long)len) {
+        fprintf(stderr, "PUT: failed to read from file: \"%s\"\n", filename);
+        free(data);
+        fclose(file);
+        return false;
+    }
+
+    fclose(file);
+
+    printf("PUT: sending file (%lu): \"%s\"\n", len, filename);
+
+    ftp_put(sockfd, filename, data, len);
     return false;
 }
 

@@ -40,10 +40,10 @@ static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len)
         return;
     }
     FILE* file = fopen(filename, "r");
-    free(filename);
 
     if (file == NULL) {
         response_error(s, client_addr, client_addr_len);
+        free(filename);
         // no need to print error if file not found
         // perror("fopen");
         return;
@@ -58,6 +58,7 @@ static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len)
     char* data = (char*)malloc(file_size);
     if (data == NULL) {
         response_error(s, client_addr, client_addr_len);
+        free(filename);
         perror("malloc");
         return;
     }
@@ -66,15 +67,19 @@ static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len)
     if (bytes < 0) {
         response_error(s, client_addr, client_addr_len);
         free(data);
+        free(filename);
         perror("fread");
         return;
     }
     fclose(file);
 
+    printf("GET: sending file (%d bytes): \"%s\"\n", file_size, filename);
+
     response_ok(s, client_addr, client_addr_len);
     send_data(s, data, file_size, client_addr, client_addr_len);
 
     free(data);
+    free(filename);
 }
 
 static void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
@@ -87,13 +92,16 @@ static void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len)
     }
 
     // get file data
-    char* filedata = (char*)recv_data(s, NULL, client_addr, client_addr_len);
+    int len;
+    char* filedata = (char*)recv_data(s, &len, client_addr, client_addr_len);
     if (filedata == NULL) {
         fprintf(stderr, "PUT: failed to read filedata\n");
         free(filename);
         response_error(s, client_addr, client_addr_len);
         return;
     }
+
+    printf("PUT: received file (%d bytes): \"%s\"\n", len, filename);
 
     // write to file
     FILE* file = fopen(filename, "w");
@@ -105,7 +113,7 @@ static void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len)
         return;
     }
 
-    int bytes = fwrite(filedata, 1, strlen(filedata), file);
+    int bytes = fwrite(filedata, 1, len, file);
     if (bytes < 0) {
         perror("fwrite");
         free(filename);
