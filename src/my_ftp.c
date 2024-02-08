@@ -23,12 +23,16 @@ void print_command(ftp_command cmd) {
 
 static void response_ok(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     ftp_response response = OK;
-    send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len);
+    if (send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len) == -1) {
+        fprintf(stderr, "RESP_OK: failed to send response\n");
+    }
 }
 
 static void response_error(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
     ftp_response response = ERROR;
-    send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len);
+    if (send_data(s, (char*)&response, sizeof(response), client_addr, client_addr_len) == -1) {
+        fprintf(stderr, "RESP_ERR: failed to send response\n");
+    }
 }
 
 static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
@@ -76,7 +80,9 @@ static void handle_get(int s, sockaddr* client_addr, socklen_t* client_addr_len)
     printf("GET: sending file (%d bytes): \"%s\"\n", file_size, filename);
 
     response_ok(s, client_addr, client_addr_len);
-    send_data(s, data, file_size, client_addr, client_addr_len);
+    if (send_data(s, data, file_size, client_addr, client_addr_len) == -1) {
+        fprintf(stderr, "GET: failed to send file\n");
+    }
 
     free(data);
     free(filename);
@@ -171,7 +177,9 @@ static void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) 
     }
 
     response_ok(s, client_addr, client_addr_len);
-    send_data(s, files, strlen(files) + 1, client_addr, client_addr_len);
+    if (send_data(s, files, strlen(files) + 1, client_addr, client_addr_len) == -1) {
+        fprintf(stderr, "LS: failed to send ls data\n");
+    }
 
     free(files);
 }
@@ -237,5 +245,10 @@ void handle_session(int s) {
             handle_exit(s, (sockaddr*)&client_addr, &client_addr_len);
             return;
         }
+
+        clear_remaining_input(s);
+
+        printf("waiting for command: ");
+        fflush(stdout);
     }
 }

@@ -4,12 +4,16 @@
 #include "my_udp.h"
 
 #define DEBUG 1
-#define MAX_TIMEOUT_MS 500
+#define MAX_TIMEOUT_MS 1500
+#define MIN_TIMEOUT_MS 10
+#define DEFAULT_TIMEOUT_MS 500
+#define USE_GO_BACK_N 1
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-static int TIMEOUT_MS = 300;
+static int SEND_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+static int RECV_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 
 void handle_error(const char* msg) {
     perror(msg);
@@ -64,6 +68,18 @@ static int get_frame_count(int len) {
     return frame_count;
 }
 
+void clear_remaining_input(int sockfd) {
+    int n;
+    bool empty = true;
+    while ((n = recv(sockfd, NULL, 1, MSG_DONTWAIT)) > 0) {
+        empty = false;
+    }
+    if (!empty) {
+        fprintf(stderr, "clear_remaining_input: socket was not empty\n");
+    }
+}
+
+
 static long long get_time_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -77,16 +93,17 @@ static bool send_timeout(char* data, int data_len, int sockfd, sockaddr* dest_ad
     pfd[0].events = POLLOUT;
 
     long long start = get_time_ms();
-    int num_events = poll(pfd, 1, TIMEOUT_MS);
-    if (num_events == 0) {
-        return true;
-    }
+    while (get_time_ms() - start < SEND_TIMEOUT_MS) {
+        int num_events = poll(pfd, 1, SEND_TIMEOUT_MS - (get_time_ms() - start));
 
-    int pollout_happened = pfd[0].revents & POLLOUT;
+        if (num_events == 0) {
+            return true;
+        }
 
-    if (!pollout_happened) {
-        printf("Unexpected pollout event\n");
-        return true;
+        int pollin_happened = pfd[0].revents & POLLOUT;
+        if (pollin_happened) {
+            break;
+        }
     }
 
     if (dest_addr == NULL) {
@@ -102,17 +119,17 @@ static bool send_timeout(char* data, int data_len, int sockfd, sockaddr* dest_ad
     long long end = get_time_ms();
     long long elapsed = end - start;
 
-    if (elapsed * 2 < TIMEOUT_MS && TIMEOUT_MS > 10) {
-        TIMEOUT_MS = MAX(TIMEOUT_MS - 10, 10);
-#if DEBUG
-        printf("Decreasing timeout to %d\n", TIMEOUT_MS);
-#endif
+    if (SEND_TIMEOUT_MS > elapsed * 10 && SEND_TIMEOUT_MS > MIN_TIMEOUT_MS) {
+        SEND_TIMEOUT_MS = MAX(SEND_TIMEOUT_MS - 10, MIN_TIMEOUT_MS);
+        // #if DEBUG
+        //         printf("Decreasing send timeout to %d due to elapsed time %lld \n", SEND_TIMEOUT_MS, elapsed);
+        // #endif
     }
-    else if (elapsed > TIMEOUT_MS * 2) {
-        TIMEOUT_MS = MIN(TIMEOUT_MS + 10, MAX_TIMEOUT_MS);
-#if DEBUG
-        printf("Increasing timeout to %d\n", TIMEOUT_MS);
-#endif
+    else if (SEND_TIMEOUT_MS < elapsed * 2 && SEND_TIMEOUT_MS < MAX_TIMEOUT_MS) {
+        SEND_TIMEOUT_MS = MIN(SEND_TIMEOUT_MS + 10, MAX_TIMEOUT_MS);
+        // #if DEBUG
+        //         printf("Increasing send timeout to %d due to elapsed time %lld\n", SEND_TIMEOUT_MS, elapsed);
+        // #endif
     }
 
     return false;
@@ -143,39 +160,72 @@ static bool send_ack(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t*
     // return send_frame(&ack, sockfd, dest_addr, dest_addr_len);
 }
 
+/// @brief Receive data from socket with timeout
+/// @param data 
+/// @param data_len 
+/// @param sockfd 
+/// @param client_addr 
+/// @param client_addr_len 
+/// @return Return true on failure
 static bool recv_timeout(char* data, int data_len, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
     struct pollfd pfd[1];
 
     pfd[0].fd = sockfd;
     pfd[0].events = POLLIN;
 
-    int num_events = poll(pfd, 1, TIMEOUT_MS);
-    if (num_events == 0) {
-        return true;
+    long long start = get_time_ms();
+
+    while (get_time_ms() - start < RECV_TIMEOUT_MS) {
+        int num_events = poll(pfd, 1, RECV_TIMEOUT_MS - (get_time_ms() - start));
+
+        if (num_events == 0) {
+            return true;
+        }
+
+        int pollin_happened = pfd[0].revents & POLLIN;
+        if (pollin_happened) {
+            break;
+        }
     }
-
-    int pollin_happened = pfd[0].revents & POLLIN;
-
-    if (!pollin_happened) {
-        printf("Unexpected pollin event\n");
-        return true;
-    }
-
 
     if (client_addr == NULL) {
         if (recv(sockfd, data, data_len, 0) == -1) {
             handle_error("recv");
+            return true;
         }
     }
     else {
         if (recvfrom(sockfd, data, data_len, 0, client_addr, client_addr_len) == -1) {
             handle_error("recvfrom");
+            return true;
         }
+    }
+
+    long long end = get_time_ms();
+    int elapsed = end - start;
+
+    if (RECV_TIMEOUT_MS > elapsed * 10 && RECV_TIMEOUT_MS > MIN_TIMEOUT_MS) {
+        RECV_TIMEOUT_MS = MAX(RECV_TIMEOUT_MS - 10, MIN_TIMEOUT_MS);
+        // #if DEBUG
+        //         printf("Decreasing recv timeout to %d due to elapsed time %d \n", RECV_TIMEOUT_MS, elapsed);
+        // #endif
+    }
+    else if (RECV_TIMEOUT_MS < elapsed * 2 && RECV_TIMEOUT_MS < MAX_TIMEOUT_MS) {
+        RECV_TIMEOUT_MS = MIN(RECV_TIMEOUT_MS + 10, MAX_TIMEOUT_MS);
+        // #if DEBUG
+        //         printf("Increasing recv timeout to %d due to elapsed time %d\n", RECV_TIMEOUT_MS, elapsed);
+        // #endif
     }
 
     return false;
 }
 
+/// @brief Get a frame from the socket
+/// @param frame 
+/// @param sockfd 
+/// @param client_addr 
+/// @param client_addr_len 
+/// @return Return true on failure
 static bool recv_frame(frame_t* frame, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
     return recv_timeout((char*)frame, sizeof(frame_t), sockfd, client_addr, client_addr_len);
 }
@@ -191,6 +241,13 @@ static frame_ack_t recv_ack(int sockfd, sockaddr* client_addr, socklen_t* client
     return ack;
 }
 
+/// @brief Send a frame of data and wait for an acknowledge
+/// @param frame 
+/// @param wait_ack 
+/// @param sockfd 
+/// @param dest_addr 
+/// @param dest_addr_len 
+/// @return 
 static bool send_frame_ack(frame_t* frame, bool wait_ack, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     for (int i = 0; i < RETRY_COUNT; i++) {
         if (send_frame(frame, sockfd, dest_addr, dest_addr_len)) {
@@ -262,13 +319,23 @@ int send_frame_by_id(const char* msg, int len, int frame_id, bool wait_ack, int 
     return send_frame_ack(&frame, wait_ack, sockfd, dest_addr, dest_addr_len);
 }
 
+/// @brief Send some data structure
+/// @param sockfd 
+/// @param msg 
+/// @param len 
+/// @param dest_addr 
+/// @param dest_addr_len 
+/// @return Return bytes sent. -1 on failure
 int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+
+    SEND_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+    RECV_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 
     // count how many frames we expect
     int frame_count = get_frame_count(len);
 
 #if DEBUG
-    printf("Expecting %d frames\n", frame_count);
+    printf("Expecting to send %d frames\n", frame_count);
 #endif
 
     // build starting frame
@@ -284,12 +351,13 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
         return -1;
     }
 
+#if USE_GO_BACK_N
     // send data frames sequentially
     int base_frame_id = 1;
     int current_frame_id = 1;
     int reset_counter = 0;
     int success_counter = 0;
-    static int GO_BACK_N = 2;
+    int GO_BACK_N = 2;
 
     while (base_frame_id <= frame_count) {
         // send up to base + N frames
@@ -301,13 +369,13 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
         }
 
         // wait for ack
-        // TODO: Fix this dynamic GO_BACK_N thing
         while (true) {
             frame_ack_t ack = recv_ack(sockfd, dest_addr, dest_addr_len);
             if (ack.frame_id == -1) {
                 reset_counter++;
                 if (reset_counter > RETRY_COUNT) {
                     fprintf(stderr, "Failed to send frame\n");
+                    fprintf(stderr, "Sent %d frames out of %d\n", base_frame_id - 1, frame_count);
                     return -1;
                 }
 #if DEBUG
@@ -338,11 +406,13 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
             }
         }
     }
-    // for (int i = 1; i <= frame_count; i++) {
-    //     if (send_frame_by_id(msg, len, i, true, sockfd, dest_addr, dest_addr_len)) {
-    //         return -1;
-    //     }
-    // }
+#else // USE_GO_BACK_N
+    for (int i = 1; i <= frame_count; i++) {
+        if (send_frame_by_id(msg, len, i, true, sockfd, dest_addr, dest_addr_len)) {
+            return -1;
+        }
+    }
+#endif // USE_GO_BACK_N
 
 #if DEBUG
     printf("Sent %d bytes\n", len);
@@ -354,6 +424,8 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_addr_len) {
     // receive start frame
     frame_t frame;
+    SEND_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+    RECV_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 
     // give a dummy length to avoid null error
     int dummy_len = 0;
@@ -374,13 +446,14 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
     // receive data frames
     int frame_count = get_frame_count(frame.info.bytes);
 #if DEBUG
-    printf("Expecting %d frames\n", frame_count);
+    printf("Expecting to receive %d frames\n", frame_count);
 #endif
     int data_len = *len;
     for (int i = 1; i <= frame_count; i++) {
         if (recv_frame_ack(&frame, i, sockfd, client_addr, client_addr_len)) {
             free(data);
             *len = 0;
+            fprintf(stderr, "Failed to receive frame %d\n", i);
             return NULL;
         }
 

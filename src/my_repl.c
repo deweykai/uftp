@@ -217,8 +217,10 @@ void my_repl(int sockfd) {
         if (nread > 1) {
             line[nread - 1] = '\0';
             if (handle_line(sockfd, line)) {
+                clear_remaining_input(sockfd);
                 return;
             }
+            clear_remaining_input(sockfd);
         }
 
         printf("myftp> ");
