@@ -75,6 +75,83 @@ static bool handle_ls(int sockfd) {
     return false;
 }
 
+bool handle_cmd_arg(int sockfd, char* cmd, char* arg) {
+    // CAT
+    if (strcmp(cmd, "cat") == 0) {
+        if (arg == NULL) {
+            printf("Usage: cat <filename>\n");
+            return false;
+        }
+
+        int len;
+        char* data = ftp_get(sockfd, arg, &len);
+        if (data != NULL) {
+            if (len < 1000) {
+                // don't print huge files
+                printf("%s\n", data);
+            }
+            else {
+                printf("file too large to print\n");
+            }
+            free(data);
+        }
+
+        return false;
+    }
+
+    // GET
+    else if (strcmp(cmd, "get") == 0) {
+        if (arg == NULL) {
+            printf("Usage: get <filename>\n");
+            return false;
+        }
+
+        return handle_get(sockfd, arg);
+    }
+
+    // PUT
+    else if (strcmp(cmd, "put") == 0) {
+        if (arg == NULL) {
+            printf("Usage: put <filename>\n");
+            return false;
+        }
+
+        return handle_put(sockfd, arg);
+    }
+
+    // DELETE
+    else if (strcmp(cmd, "delete") == 0) {
+        if (arg == NULL) {
+            printf("Usage: delete <filename>\n");
+            return false;
+        }
+
+        return handle_delete(sockfd, arg);
+    }
+
+    // LS
+    else if (strcmp(cmd, "ls") == 0) {
+        if (arg != NULL) {
+            printf("Usage: ls\n");
+            return false;
+        }
+
+        return handle_ls(sockfd);
+    }
+
+    // EXIT
+    else if (strcmp(cmd, "exit") == 0) {
+        if (arg != NULL) {
+            printf("Usage: exit\n");
+            return false;
+        }
+        ftp_exit(sockfd);
+        return true;
+    }
+
+    return false;
+}
+
 /// @brief Handle a line of input from the user
 /// @param sockfd 
 /// @param line 
@@ -115,78 +192,7 @@ bool handle_line(int sockfd, char* line) {
             arg[len] = '\0';
         }
 
-        // CAT
-        if (strcmp(cmd, "cat") == 0) {
-            if (arg == NULL) {
-                printf("Usage: cat <filename>\n");
-                return false;
-            }
-
-            int len;
-            char* data = ftp_get(sockfd, arg, &len);
-            if (data != NULL) {
-                if (len < 1000) {
-                    // don't print huge files
-                    printf("%s\n", data);
-                }
-                else {
-                    printf("file too large to print\n");
-                }
-                free(data);
-            }
-
-            return false;
-        }
-
-        // GET
-        else if (strcmp(cmd, "get") == 0) {
-            if (arg == NULL) {
-                printf("Usage: get <filename>\n");
-                return false;
-            }
-
-            return handle_get(sockfd, arg);
-        }
-
-        // PUT
-        else if (strcmp(cmd, "put") == 0) {
-            if (arg == NULL) {
-                printf("Usage: put <filename>\n");
-                return false;
-            }
-
-            return handle_put(sockfd, arg);
-        }
-
-        // DELETE
-        else if (strcmp(cmd, "delete") == 0) {
-            if (arg == NULL) {
-                printf("Usage: delete <filename>\n");
-                return false;
-            }
-
-            return handle_delete(sockfd, arg);
-        }
-
-        // LS
-        else if (strcmp(cmd, "ls") == 0 && arg == NULL) {
-            if (arg != NULL) {
-                printf("Usage: ls\n");
-                return false;
-            }
-
-            return handle_ls(sockfd);
-        }
-
-        // EXIT
-        else if (strcmp(cmd, "exit") == 0 && arg == NULL) {
-            if (arg != NULL) {
-                printf("Usage: exit\n");
-                return false;
-            }
-            ftp_exit(sockfd);
-            return true;
-        }
+        bool exit = handle_cmd_arg(sockfd, cmd, arg);
 
         if (cmd != NULL) {
             free(cmd);
@@ -194,6 +200,8 @@ bool handle_line(int sockfd, char* line) {
         if (arg != NULL) {
             free(arg);
         }
+
+        return exit;
     }
     else if (reti == REG_NOMATCH) {
         printf("Command not found\n");
