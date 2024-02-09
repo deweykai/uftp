@@ -8,6 +8,8 @@
 #define MIN_TIMEOUT_MS 10
 #define DEFAULT_TIMEOUT_MS 500
 #define USE_GO_BACK_N 1
+#define MAX_GO_BACK_N 512000
+#define GBN_THRESHOLD_US 20
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -84,6 +86,12 @@ static long long get_time_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+static long long get_time_us(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
 static bool send_timeout(char* data, int data_len, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
@@ -369,6 +377,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
         }
 
         // wait for ack
+        long long start = get_time_us();
         while (true) {
             frame_ack_t ack = recv_ack(sockfd, dest_addr, dest_addr_len);
             if (ack.frame_id == -1) {
@@ -396,7 +405,9 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
                 success_counter++;
                 base_frame_id++;
 
-                if (success_counter >= GO_BACK_N) {
+                long long end = get_time_us();
+
+                if (success_counter >= GO_BACK_N && GO_BACK_N < MAX_GO_BACK_N && end - start > GBN_THRESHOLD_US) {
                     GO_BACK_N = GO_BACK_N * 2;
 #if DEBUG
                     printf("Increasing GO_BACK_N to %d\n", GO_BACK_N);
