@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  zeus:
+    build: .
+    image: myftp
+    command: valgrind ./ftp_server 1234
+    ports:
+      - "1234:1234"
+
+  poseidon:
+    build: .
+    image: myftp
+    command: ./ftp_client zeus 1234

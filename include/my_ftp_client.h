@@ -1,6 +1,7 @@
 #ifndef MY_FTP_CLIENT_H
 #define MY_FTP_CLIENT_H
 
+#include "common.h"
 #include "my_ftp.h"
 
 char* ftp_get(int s, char* filename, int* len);

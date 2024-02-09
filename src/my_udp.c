@@ -1,9 +1,9 @@
+#include "my_udp.h"
+
 #include <poll.h>
 #include <sys/time.h>
 
-#include "my_udp.h"
-
-#define DEBUG 1
+#define DEBUG 0
 #define MAX_TIMEOUT_MS 1500
 #define MIN_TIMEOUT_MS 10
 #define DEFAULT_TIMEOUT_MS 500
@@ -70,16 +70,23 @@ static int get_frame_count(int len) {
     return frame_count;
 }
 
+#ifdef MSG_DONTWAIT
 void clear_remaining_input(int sockfd) {
+
     int n;
     bool empty = true;
-    while ((n = recv(sockfd, NULL, 1, MSG_DONTWAIT)) > 0) {
+    char buf[1];
+    while ((n = recv(sockfd, buf, 1, MSG_DONTWAIT)) > 0) {
         empty = false;
     }
     if (!empty) {
         fprintf(stderr, "clear_remaining_input: socket was not empty\n");
     }
 }
+#else
+void clear_remaining_input(int) {
+}
+#endif
 
 
 static long long get_time_ms(void) {

@@ -16,12 +16,29 @@ int get_socket(char* hostname, char* port) {
         return 2;
     }
 
-    int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
-        perror("connect");
-        return 3;
+    int s = -1;
+    // loop through all the results and bind to the first we can
+    for (struct addrinfo* p = res; p != NULL; p = p->ai_next) {
+        if ((s = socket(p->ai_family, p->ai_socktype,
+            p->ai_protocol)) == -1) {
+            perror("listener: socket");
+            continue;
+        }
+
+        if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
+            perror("connect");
+            continue;
+        }
+
+        break;
     }
+
     freeaddrinfo(res);
+
+    if (s == -1) {
+        fprintf(stderr, "listener: failed to bind socket\n");
+        exit(1);
+    }
 
     return s;
 }

@@ -9,7 +9,7 @@ char* ftp_get(int s, char* filename, int* len) {
     }
 
     // send filename
-    if (send_data(s, filename, strlen(filename), NULL, NULL) == -1) {
+    if (send_data(s, filename, strlen(filename) + 1, NULL, NULL) == -1) {
         fprintf(stderr, "GET: failed to send filename\n");
         return NULL;
     }
@@ -46,7 +46,7 @@ void ftp_put(int s, char* filename, char* filedata, int filedata_len) {
     }
 
     // send filename
-    if (send_data(s, filename, strlen(filename), NULL, NULL) == -1) {
+    if (send_data(s, filename, strlen(filename) + 1, NULL, NULL) == -1) {
         fprintf(stderr, "PUT: failed to send filename\n");
         return;
     }
@@ -82,7 +82,7 @@ void ftp_delete(int s, char* filename) {
     }
 
     // filename
-    if (send_data(s, filename, strlen(filename), NULL, NULL) == -1) {
+    if (send_data(s, filename, strlen(filename) + 1, NULL, NULL) == -1) {
         fprintf(stderr, "DELETE: failed to send filename\n");
         return;
     }

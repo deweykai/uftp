@@ -20,7 +20,7 @@ int get_socket(char* port) {
         return 2;
     }
 
-    int s;
+    int s = -1;
     // loop through all the results and bind to the first we can
     for (struct addrinfo* p = res; p != NULL; p = p->ai_next) {
         if ((s = socket(p->ai_family, p->ai_socktype,
@@ -39,6 +39,11 @@ int get_socket(char* port) {
     }
 
     freeaddrinfo(res);
+
+    if (s == -1) {
+        fprintf(stderr, "listener: failed to bind socket\n");
+        exit(1);
+    }
 
     return s;
 }

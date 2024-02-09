@@ -1,9 +1,9 @@
-#include <regex.h>
-
 #include "my_udp.h"
 #include "my_ftp.h"
 #include "my_ftp_client.h"
 #include "my_repl.h"
+
+#include <regex.h>
 
 static bool handle_get(int sockfd, char* filename) {
     int len;

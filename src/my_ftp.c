@@ -1,6 +1,8 @@
-#include <dirent.h>
-
 #include "my_ftp.h"
+
+#include <dirent.h>
+#include <sys/stat.h>
+#include <limits.h>
 
 void print_command(ftp_command cmd) {
     switch (cmd) {
@@ -138,42 +140,81 @@ static void handle_put(int s, sockaddr* client_addr, socklen_t* client_addr_len)
     free(filedata);
 }
 
-static void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+static char* get_files_list() {
+    struct stat st;
+    if (stat(".", &st) != 0) {
+        perror("stat");
+        return NULL;
+    }
+
+    if (!S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "Not a directory\n");
+        return NULL;
+    }
+
     DIR* dir = opendir(".");
     if (dir == NULL) {
         perror("opendir");
-        return;
+        return NULL;
     }
 
     char* files = NULL;
     size_t files_size = 0;
-
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {  // Only regular files
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/%s", ".", entry->d_name);
+
+        if (stat(path, &st) != 0) {
+            perror("stat");
+            closedir(dir);
+            free(files);
+            return NULL;
+        }
+
+        if (S_ISREG(st.st_mode)) {  // Only regular files
             size_t filename_len = strlen(entry->d_name);
             size_t new_size = files_size + filename_len + 1;  // +1 for newline character
 
-            char* new_files = realloc(files, new_size);
+            char* new_files = realloc(files, new_size * sizeof(char));
             if (new_files == NULL) {
                 perror("realloc");
                 free(files);
                 closedir(dir);
-                response_error(s, client_addr, client_addr_len);
-                return;
+                return NULL;
             }
 
             files = new_files;
-            files_size = new_size;
+            strncpy(files + files_size, entry->d_name, filename_len);
 
-            strcat(files, entry->d_name);
-            strcat(files, "\n");
+            files_size = new_size;
+            files[files_size - 1] = '\n';
         }
     }
     closedir(dir);
 
     if (files == NULL) {
         files = strdup("No files found\n");
+    }
+
+    // add null terminator
+    char* new_files = realloc(files, files_size + 1);
+    if (new_files == NULL) {
+        perror("realloc");
+        free(files);
+        return NULL;
+    }
+    files = new_files;
+    files[files_size] = '\0';
+
+    return files;
+}
+
+static void handle_ls(int s, sockaddr* client_addr, socklen_t* client_addr_len) {
+    char* files = get_files_list();
+    if (files == NULL) {
+        response_error(s, client_addr, client_addr_len);
+        return;
     }
 
     response_ok(s, client_addr, client_addr_len);
