@@ -9,7 +9,7 @@
 #define DEFAULT_TIMEOUT_MS 500
 #define USE_GO_BACK_N 1
 #define MAX_GO_BACK_N 512000
-#define GBN_THRESHOLD_US 20
+#define GBN_THRESHOLD_US 200
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
