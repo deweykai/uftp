@@ -284,9 +284,11 @@ void handle_session(int s) {
             break;
         case EXIT:
             handle_exit(s, (sockaddr*)&client_addr, &client_addr_len);
+            free(data);
             return;
         }
 
+        free(data);
         clear_remaining_input(s);
 
         printf("waiting for command: ");

@@ -58,6 +58,7 @@ static bool handle_put(int sockfd, char* filename) {
     printf("PUT: sending file (%lu): \"%s\"\n", len, filename);
 
     ftp_put(sockfd, filename, data, len);
+    free(data);
     return false;
 }
 
@@ -169,6 +170,7 @@ bool handle_line(int sockfd, char* line) {
     int reti = regcomp(&re, pattern, REG_EXTENDED);
     if (reti) {
         fprintf(stderr, "Could not compile regex\n");
+        regfree(&re);
         return true;
     }
 
@@ -201,6 +203,7 @@ bool handle_line(int sockfd, char* line) {
             free(arg);
         }
 
+        regfree(&re);
         return exit;
     }
     else if (reti == REG_NOMATCH) {
@@ -212,6 +215,7 @@ bool handle_line(int sockfd, char* line) {
         fprintf(stderr, "Regex match failed: %s\n", msgbuf);
     }
 
+    regfree(&re);
     return false;
 }
 
@@ -226,9 +230,15 @@ void my_repl(int sockfd) {
             line[nread - 1] = '\0';
             if (handle_line(sockfd, line)) {
                 clear_remaining_input(sockfd);
+                free(line);
                 return;
             }
             clear_remaining_input(sockfd);
+        }
+
+        if (line != NULL) {
+            free(line);
+            line = NULL;
         }
 
         printf("myftp> ");
