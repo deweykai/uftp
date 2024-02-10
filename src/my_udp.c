@@ -3,11 +3,11 @@
 #include <poll.h>
 #include <sys/time.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #define MAX_TIMEOUT_MS 1500
 #define MIN_TIMEOUT_MS 10
 #define DEFAULT_TIMEOUT_MS 500
-#define USE_GO_BACK_N 1
+#define USE_GO_BACK_N 0
 #define MAX_GO_BACK_N 512000
 #define GBN_THRESHOLD_US 200
 

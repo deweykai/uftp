@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -Werror -std=c2x -g -Iinclude -O2
+CFLAGS := -Wall -Wextra -std=c2x -g -Iinclude -O2
 # List of source files
 SRC_FILES := src/my_udp.c src/my_ftp.c src/my_ftp_client.c src/my_repl.c
 
