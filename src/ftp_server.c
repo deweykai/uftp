@@ -20,6 +20,9 @@ int get_socket(char* port) {
         return 2;
     }
 
+    printf("Staring server on port %s\n", port);
+    fflush(stdout);
+
     int s = -1;
     // loop through all the results and bind to the first we can
     for (struct addrinfo* p = res; p != NULL; p = p->ai_next) {

@@ -260,6 +260,7 @@ void handle_session(int s) {
 
         int len;
 
+        fflush(stdout);
         ftp_command* data = (ftp_command*)recv_data(s, &len, (sockaddr*)&client_addr, &client_addr_len);
         // no command received
         if (data == NULL) {

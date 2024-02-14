@@ -6,10 +6,12 @@ services:
     image: myftp
     cap_add:
     - NET_ADMIN
-    command: ./ftp_server 1234
-    # command: ./run.bash
+    # command: ./ftp_server 1234
+    command: ./run.bash
     ports:
       - "1234:1234"
+    volumes:
+      - ./testdir:/code/server
 
   poseidon:
     build: .

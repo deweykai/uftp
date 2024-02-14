@@ -12,7 +12,7 @@ def run_ftp_command(command):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     test_clientdir = os.path.join(current_dir, 'test_clientdir')
     process = subprocess.Popen(['../ftp_client', 'zeus', '1234'], cwd=test_clientdir, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    output, err = process.communicate(command + '\n', timeout=5)
+    output, err = process.communicate(command + '\n', timeout=180)
     process.kill()
     logging.debug(output.strip())
     if len(err.strip()) > 0:
@@ -24,8 +24,8 @@ def run_ftp_client(commands):
         run_ftp_command(command)
 
 commands = [
-    'put photo.png',
-    'get photo.png',
+    'put movie.mov',
+    'get movie.mov',
     'delete photo.png',
     'ls',
     'exit',
