@@ -24,8 +24,8 @@ def run_ftp_client(commands):
         run_ftp_command(command)
 
 commands = [
-    'put movie.mov',
-    'get movie.mov',
+    'put photo.png',
+    'get photo.png',
     'delete photo.png',
     'ls',
     'exit',
