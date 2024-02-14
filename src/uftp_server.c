@@ -1,4 +1,4 @@
-/*
+/* Author: Kai Dewey
  * udpserver.c - A simple UDP echo server
  * usage: udpserver <port>
  */

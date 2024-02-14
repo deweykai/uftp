@@ -1,3 +1,9 @@
+/**
+ * @file my_repl.h
+ * @author Kai Dewey
+ * @brief Functions for ftp client repl.
+ */
+
 #ifndef MY_REPL_H
 #define MY_REPL_H
 

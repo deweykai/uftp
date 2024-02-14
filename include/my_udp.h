@@ -1,3 +1,9 @@
+/**
+ * @file my_udp.h
+ * @author Kai Dewey
+ * @brief header file for udp functions
+ */
+
 #ifndef MY_UDP_H
 #define MY_UDP_H
 

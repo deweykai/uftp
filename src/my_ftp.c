@@ -1,3 +1,8 @@
+/**
+ * @file my_ftp.c
+ * @author Kai Dewey
+ */
+
 #include "my_ftp.h"
 
 #include <dirent.h>

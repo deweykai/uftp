@@ -1,3 +1,9 @@
+/**
+ * @file my_ftp_client.h
+ * @author Kai Dewey
+ * @brief A list of functions for the FTP client.
+ */
+
 #ifndef MY_FTP_CLIENT_H
 #define MY_FTP_CLIENT_H
 

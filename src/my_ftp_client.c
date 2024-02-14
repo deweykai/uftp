@@ -1,3 +1,8 @@
+/**
+ * @file my_ftp_client.c
+ * @author Kai Dewey
+ */
+
 #include "my_ftp_client.h"
 
 char* ftp_get(int s, char* filename, int* len) {

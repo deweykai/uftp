@@ -1,3 +1,8 @@
+/**
+ * @file my_udp.c
+ * @author Kai Dewey
+ */
+
 #include "my_udp.h"
 
 #include <poll.h>
