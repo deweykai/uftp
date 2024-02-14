@@ -4,13 +4,17 @@
 #include <sys/time.h>
 
 #define DEBUG 0
-#define UDP_TIMEOUT_MS 500
+#define DEFAULT_TIMEOUT_MS 500
+#define DEFAULT_SEND_TIMEOUT_MS 100
 #define USE_GO_BACK_N 1
-#define MAX_GO_BACK_N 512
+#define MAX_GO_BACK_N 1024
 #define GBN_THRESHOLD_US 200
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define ABS(a) ((a) < 0 ? (-a) : (a))
+
+static int UDP_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 
 static long long get_time_us(void) {
     struct timeval tv;
@@ -35,6 +39,7 @@ struct frame_header_t {
         DATA,
         START,
         ACK,
+        END,
     } type;
 };
 
@@ -68,6 +73,9 @@ static void print_frame(frame_t* frame) {
         printf("  bytes = %d\n", frame->packet.info.bytes);
     case ACK:
         printf("  ACK\n");
+        break;
+    case END:
+        printf("  END\n");
         break;
     }
 }
@@ -108,8 +116,8 @@ static bool send_timeout(char* data, int data_len, int sockfd, sockaddr* dest_ad
     pfd[0].events = POLLOUT;
 
     long long start = get_time_ms();
-    while (get_time_ms() - start < UDP_TIMEOUT_MS) {
-        int num_events = poll(pfd, 1, UDP_TIMEOUT_MS - (get_time_ms() - start));
+    while (get_time_ms() - start < DEFAULT_SEND_TIMEOUT_MS) {
+        int num_events = poll(pfd, 1, DEFAULT_SEND_TIMEOUT_MS - (get_time_ms() - start));
 
         if (num_events == 0) {
             return true;
@@ -199,6 +207,7 @@ static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_
         len += sizeof(frame->packet);
         break;
     case ACK:
+    case END:
         break;
     }
     bool ret = send_timeout(frame, len, sockfd, dest_addr, dest_addr_len);
@@ -225,6 +234,22 @@ static bool recv_frame(frame_t* frame, int sockfd, sockaddr* client_addr, sockle
     return false;
 }
 
+static bool try_recv_ack(int frame_id, int* ack_frame_id, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
+
+    // wait for ack for timeout
+    frame_t frame;
+    while (recv_frame(&frame, sockfd, client_addr, client_addr_len) == false) {
+        *ack_frame_id = frame.header.frame_id;
+
+        if (frame.header.type == ACK && frame.header.frame_id >= frame_id) {
+            return false;
+        }
+    }
+
+
+    return true;
+}
+
 /// @brief Send a frame of data and wait for an acknowledge
 /// @param frame 
 /// @param wait_ack 
@@ -237,7 +262,9 @@ static bool send_frame_ack(frame_t* frame, bool wait_ack, int sockfd, sockaddr* 
     bool sent_frame = false;
     for (int i = 0; i < RETRY_COUNT; i++) {
         if (send_frame(frame, sockfd, dest_addr, dest_addr_len)) {
+#if DEBUG > 1
             printf("Failed to send frame\n");
+#endif
             continue;
         }
 
@@ -247,12 +274,14 @@ static bool send_frame_ack(frame_t* frame, bool wait_ack, int sockfd, sockaddr* 
             return false;
         }
 
-        frame_t ack;
-        if (recv_frame(&ack, sockfd, dest_addr, dest_addr_len)) {
+        int ack_frame_id;
+        if (try_recv_ack(frame->header.frame_id, &ack_frame_id, sockfd, dest_addr, dest_addr_len)) {
+#if DEBUG > 1
             printf("Failed to receive ack\n");
+#endif
             continue;
         }
-        if (ack.header.frame_id == frame->header.frame_id) {
+        else {
             return false;
         }
     }
@@ -283,7 +312,7 @@ static bool recv_frame_ack(frame_t* frame, int next_frame, int sockfd, sockaddr*
             continue;
         }
 
-#if DEBUG
+#if DEBUG > 1
         if (frame->header.frame_id != next_frame) {
             printf("Received frame %d, expected %d\n", frame->header.frame_id, next_frame);
         }
@@ -329,22 +358,6 @@ int send_frame_by_id(const char* msg, int len, int frame_id, bool wait_ack, int 
     return send_frame_ack(&frame, wait_ack, sockfd, dest_addr, dest_addr_len);
 }
 
-static bool try_recv_ack(int frame_id, int* ack_frame_id, int sockfd, sockaddr* client_addr, socklen_t* client_addr_len) {
-
-    // wait for ack for timeout
-    frame_t frame;
-    while (recv_frame(&frame, sockfd, client_addr, client_addr_len) == false) {
-        *ack_frame_id = frame.header.frame_id;
-
-        if (frame.header.type == ACK && frame.header.frame_id >= frame_id) {
-            return false;
-        }
-    }
-
-
-    return true;
-}
-
 /// @brief Send some data structure
 /// @param sockfd 
 /// @param msg 
@@ -353,6 +366,7 @@ static bool try_recv_ack(int frame_id, int* ack_frame_id, int sockfd, sockaddr* 
 /// @param dest_addr_len 
 /// @return Return bytes sent. -1 on failure
 int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+    UDP_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
     // count how many frames we expect
     int frame_count = get_frame_count(len);
 
@@ -370,6 +384,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
     frame.packet.info.bytes = len;
 
     if (send_frame_ack(&frame, true, sockfd, dest_addr, dest_addr_len)) {
+        fprintf(stderr, "Failed to send start frame\n");
         return -1;
     }
 
@@ -379,7 +394,8 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
     int current_frame_id = 1;
     int reset_counter = 0;
     int success_counter = 0;
-    int GO_BACK_N = 2;
+    int GO_BACK_N = 32;
+    int deci_position = 0;
 
     while (base_frame_id <= frame_count) {
         // send up to base + N frames
@@ -413,6 +429,9 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
                 printf("Decreasing GO_BACK_N to %d\n", GO_BACK_N);
 #endif
             }
+
+            // increase timeout for failed frame
+            UDP_TIMEOUT_MS = MIN(UDP_TIMEOUT_MS * 2, 500);
         }
         else {
             reset_counter = 0;
@@ -421,10 +440,24 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 
             long long end = get_time_us();
 
+            // set timeout to the time it took to receive a valid frame
+            int elapsed_ms = ((end - start) / 1000);
+            UDP_TIMEOUT_MS = elapsed_ms + 50;
+
+
+            if (frame_count > 100) {
+                if (base_frame_id >= (frame_count * deci_position / 10)) {
+                    printf("Sent %d%% (%d/%d)\n", deci_position * 10, base_frame_id, frame_count);
+                    fflush(stdout);
+                    deci_position++;
+                }
+            }
+
             if (success_counter >= GO_BACK_N && GO_BACK_N < MAX_GO_BACK_N && end - start > GBN_THRESHOLD_US) {
                 GO_BACK_N = GO_BACK_N * 2;
 #if DEBUG
                 printf("Increasing GO_BACK_N to %d\n", GO_BACK_N);
+                fflush(stdout);
 #endif
             }
         }
@@ -437,6 +470,16 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
     }
 #endif // USE_GO_BACK_N
 
+    // send end frame
+    memset(&frame, 0, sizeof(frame)); // zero memory
+    frame.header.type = END;
+    frame.header.frame_id = frame_count + 1;
+
+    if (send_frame_ack(&frame, true, sockfd, dest_addr, dest_addr_len)) {
+        fprintf(stderr, "Failed to send start frame\n");
+        return -1;
+    }
+
 #if DEBUG
     printf("Sent %d bytes\n", len);
 #endif
@@ -445,6 +488,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 }
 
 void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_addr_len) {
+    UDP_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
     // receive start frame
     frame_t frame;
 
@@ -459,6 +503,15 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
         return NULL;
     }
 
+    if (frame.header.type != START) {
+#if DEBUG
+        fprintf(stderr, "Expected START frame\n");
+#endif
+        * len = 0;
+        return NULL;
+    }
+
+
     *len = frame.packet.info.bytes;
 
     // allocate memory for data
@@ -470,6 +523,8 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
     printf("Expecting to receive %d frames\n", frame_count);
 #endif
     int data_len = *len;
+
+    int deci_position = 0;
     for (int i = 1; i <= frame_count; i++) {
         if (recv_frame_ack(&frame, i, sockfd, client_addr, client_addr_len)) {
             free(data);
@@ -478,10 +533,27 @@ void* recv_data(int sockfd, int* len, sockaddr* client_addr, socklen_t* client_a
             return NULL;
         }
 
+        if (frame_count > 100) {
+            if (i >= (frame_count * deci_position / 10)) {
+                printf("Received %d%% (%d/%d)\n", deci_position * 10, i, frame_count);
+                fflush(stdout);
+                deci_position++;
+            }
+        }
+
         // copy data into buffer
         memcpy(data + PACKET_SIZE * (frame.header.frame_id - 1), &frame.packet.data, MIN(data_len, PACKET_SIZE));
         data_len = data_len - PACKET_SIZE;
     }
+
+    // receive end frame
+    if (recv_frame_ack(&frame, frame_count + 1, sockfd, client_addr, client_addr_len)) {
+        free(data);
+        *len = 0;
+        fprintf(stderr, "Failed to receive end frame\n");
+        return NULL;
+    }
+
 
 #if DEBUG
     printf("Received %d bytes\n", *len);
