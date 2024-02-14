@@ -197,7 +197,7 @@ static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_
 #if DEBUG > 1
     printf("SEND ");
     print_frame(frame);
-#endif DEBUG
+#endif
     int len = sizeof(frame_header_t);
     switch (frame->header.type) {
     case DATA:
@@ -210,7 +210,7 @@ static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_
     case END:
         break;
     }
-    bool ret = send_timeout(frame, len, sockfd, dest_addr, dest_addr_len);
+    bool ret = send_timeout((char*)frame, len, sockfd, dest_addr, dest_addr_len);
     return ret;
 }
 
@@ -259,7 +259,6 @@ static bool try_recv_ack(int frame_id, int* ack_frame_id, int sockfd, sockaddr* 
 /// @return 
 static bool send_frame_ack(frame_t* frame, bool wait_ack, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
     // send frame
-    bool sent_frame = false;
     for (int i = 0; i < RETRY_COUNT; i++) {
         if (send_frame(frame, sockfd, dest_addr, dest_addr_len)) {
 #if DEBUG > 1
