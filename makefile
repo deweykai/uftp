@@ -7,10 +7,10 @@ INCLUDES := $(wildcard include/*.h)
 
 all: ftp_server ftp_client
 
-ftp_server: src/ftp_server.c $(SRC_FILES) $(INCLUDES)
+ftp_server: src/uftp_server.c $(SRC_FILES) $(INCLUDES)
 	$(CC) $(CFLAGS) -o ftp_server $(SRC_FILES) $<
 
-ftp_client: src/ftp_client.c $(SRC_FILES) $(INCLUDES)
+ftp_client: src/uftp_client.c $(SRC_FILES) $(INCLUDES)
 	$(CC) $(CFLAGS) -o ftp_client $(SRC_FILES) $<
 
 clean:
