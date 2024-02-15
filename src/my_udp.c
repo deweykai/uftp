@@ -8,7 +8,7 @@
 #include <poll.h>
 #include <sys/time.h>
 
-#define DEBUG 2
+#define DEBUG 0 // 0: no debug, 1: print start and end frames, 2: print all frames
 #define DEFAULT_TIMEOUT_MS 500
 #define DEFAULT_SEND_TIMEOUT_MS 100
 #define USE_GO_BACK_N 1
@@ -77,6 +77,7 @@ static void print_frame(frame_t* frame) {
     case START:
         printf("  START\n");
         printf("  bytes = %d\n", frame->packet.info.bytes);
+        break;
     case ACK:
         printf("  ACK\n");
         break;
@@ -262,6 +263,18 @@ static bool try_recv_ack(int frame_id, int* ack_frame_id, int sockfd, sockaddr* 
     // wait for ack for timeout
     frame_t frame;
     while (recv_frame(&frame, sockfd, client_addr, client_addr_len) == false) {
+        // if there is an end frame from a previous transaction and we are waiting for
+        // a start frame, we will ack it, but not use it.
+        if (frame.header.type == END && frame_id == 0) {
+            frame_t ack;
+            ack.header.frame_id = frame.header.frame_id;
+            ack.header.type = ACK;
+            if (send_frame(&ack, sockfd, client_addr, client_addr_len)) {
+                fprintf(stderr, "Failed to send ack\n");
+            }
+            continue;
+        }
+
         *ack_frame_id = frame.header.frame_id;
 
         // we allow for a header frame id to be greater than the frame id
