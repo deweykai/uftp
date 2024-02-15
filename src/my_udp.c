@@ -66,7 +66,7 @@ struct frame_t {
 typedef struct frame_t frame_t;
 
 static void print_frame(frame_t* frame) {
-    long long time = get_time_ms();
+    // long long time = get_time_ms();
     // printf("[%lld] ", time);
     printf("(%5d) [FRAME: %5d]", frame->header.id, frame->header.frame_id);
 
