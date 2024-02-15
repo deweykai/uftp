@@ -10,7 +10,7 @@
 #include "common.h"
 
 #define PACKET_SIZE 1024
-#define RETRY_COUNT 5
+#define RETRY_COUNT 10
 
 
 typedef struct sockaddr_in sockaddr_in;

@@ -480,7 +480,9 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
 
             // set timeout to the time it took to receive a valid frame
             int elapsed_ms = ((end - start) / 1000);
-            UDP_TIMEOUT_MS = elapsed_ms + 50;
+            if (elapsed_ms > 50) {
+                UDP_TIMEOUT_MS = elapsed_ms + 50;
+            }
 
 
             // for large files, print progress
