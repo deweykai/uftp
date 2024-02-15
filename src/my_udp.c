@@ -8,7 +8,7 @@
 #include <poll.h>
 #include <sys/time.h>
 
-#define DEBUG 0
+#define DEBUG 2
 #define DEFAULT_TIMEOUT_MS 500
 #define DEFAULT_SEND_TIMEOUT_MS 100
 #define USE_GO_BACK_N 1
@@ -46,6 +46,7 @@ struct frame_header_t {
         ACK,
         END,
     } type;
+    int id; // a unique number for debugging. Unique only to the sender
 };
 
 typedef struct frame_header_t frame_header_t;
@@ -66,8 +67,8 @@ typedef struct frame_t frame_t;
 
 static void print_frame(frame_t* frame) {
     long long time = get_time_ms();
-    printf("[%lld] ", time);
-    printf("[FRAME: %d]", frame->header.frame_id);
+    // printf("[%lld] ", time);
+    printf("(%5d) [FRAME: %5d]", frame->header.id, frame->header.frame_id);
 
     switch (frame->header.type) {
     case DATA:
@@ -206,6 +207,9 @@ static bool recv_timeout(char* data, int data_len, int sockfd, sockaddr* client_
 /// @param dest_addr_len 
 /// @return Return true on failure
 static bool send_frame(frame_t* frame, int sockfd, sockaddr* dest_addr, socklen_t* dest_addr_len) {
+    static int id = 0;
+    frame->header.id = id++;
+
 #if DEBUG > 1
     printf("SEND ");
     print_frame(frame);
@@ -342,9 +346,10 @@ static bool recv_frame_ack(frame_t* frame, int next_frame, int sockfd, sockaddr*
         }
 #endif
 
-        if (frame->header.frame_id < next_frame) {
+        if (frame->header.frame_id < next_frame || (frame->header.type == END && next_frame == 0)) {
             // send again ack in case of failed ack
             // only ack if we have already passed this frame
+            // we also ack the end frame that may be left over from a previous transaction
             frame_t ack;
             ack.header.type = ACK;
             ack.header.frame_id = frame->header.frame_id;
@@ -460,7 +465,7 @@ int send_data(int sockfd, const char* msg, int len, sockaddr* dest_addr, socklen
             current_frame_id = base_frame_id;
             success_counter = 0;
 
-            if (reset_counter > 1) {
+            if (reset_counter % 2 == 0) {
                 // decrease GO_BACK_N if we are doing poorly
                 GO_BACK_N = GO_BACK_N < 2 ? 1 : GO_BACK_N / 2;
 #if DEBUG
